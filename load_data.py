@@ -9,7 +9,7 @@ import os
 import gzip
 import pandas as pd
 
-CHUNK_SIZE = 100000
+CHUNK_SIZE = 1000000
 
 def unzip_datasets(folderpath = './data/'):
     listOfFiles = ['destinations.csv', 'sample_submission.csv', 'test.csv', 'train.csv']
@@ -32,6 +32,24 @@ def load_expdata_chunks(folderpath = './data/'):
     
     return trainreader, testreader
     
+def setOfAllUsers(df_reader):
+    
+    setAll = set([])
+    for chunk in df_reader:
+        setAll = setAll.union(set(chunk.user_id))
+    
+    return setAll
+    
+def subsetDataset(df_reader, subsetUsers):
+    df = None
+    
+    for chunk in df_reader:
+        if df is None:
+            df = chunk[0:0]
+        print len(df)
+        df = df.append(chunk[chunk.user_id.isin(subsetUsers)])
+        
+    return df
           
 if __name__ == '__main__':
     unzip_datasets()
