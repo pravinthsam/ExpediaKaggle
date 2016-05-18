@@ -7,7 +7,7 @@ Created on Thu May  5 15:19:44 2016
 import load_data
 import random
 
-NUM_USERS = 10000
+NUM_USERS = 50000
 
 if __name__ == '__main__':
     trainreader, testreader = load_data.load_expdata_chunks()
@@ -28,20 +28,41 @@ if __name__ == '__main__':
     testdf = load_data.subsetDataset(testreader, subsetOfUsers)
     
     # Filtering dataset for only booking events
-    traindf_booking = traindf[traindf.is_booking==1]
+    traindf = traindf[traindf.is_booking==1]
+    
+    # Removing nan values
+    traindf = traindf.dropna()
+    testdf = testdf.dropna()
     
     # Most common clusters
-    clusters_ordered = list(traindf_booking.hotel_cluster.value_counts().index)
+    clusters_ordered = list(traindf.hotel_cluster.value_counts().index)
     most_common_clusters = clusters_ordered[:5]
     
     # Making a simple prediction
+    # Find 5 most common clusters and give that as the solution for all the rows
+    print 'Calculating results for a very simple solution where all answers are the same...'
     _, testreader = load_data.load_expdata_chunks()
     testdfAll = load_data.subsetDataset(testreader, setOfAllUsersTest)
     
-    commonHotel_cluster = ' '.join([str(c) for c in most_common_clusters])
-    resultdf_simple = testdfAll[['id']]
-    resultdf_simple['hotel_cluster'] = commonHotel_cluster
-    resultdf_simple.to_csv('results/first_submit.csv', index=False)
+    simple_solution = [most_common_clusters for i in range(len(testdfAll))]
+    
+    load_data.createSubmissionFile(testdfAll[['id']], simple_solution, 'results/first_submit.csv')
+    
+    # Simple rule for aggregating across orig_destination_distance and hotel_market
+    print 'Calculating the results when aggregated over orig_destination_distance and hotel_market...'
+    dist_market_map =  {}   
+    for index, t in traindf.iterrows():
+        type(t)
+        key = (t.orig_destination_distance, t.hotel_market)
+        
+        if key not in dist_market_map.keys():
+            dist_market_map[key] = {t.hotel_cluster:1}
+        else:
+            if t.hotel_cluster not in dist_market_map[key].keys():
+                dist_market_map[key][t.hotel_cluster] = 1
+            else:
+                dist_market_map[key][t.hotel_cluster] = dist_market_map[key][t.hotel_cluster] + 1
+        
     
     
     

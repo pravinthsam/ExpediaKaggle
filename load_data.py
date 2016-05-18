@@ -50,6 +50,12 @@ def subsetDataset(df_reader, subsetUsers):
         df = df.append(chunk[chunk.user_id.isin(subsetUsers)])
         
     return df
+
+def createSubmissionFile(idList, allClusters, filename = 'results/model_results.csv'):
+    results = idList
+    results['hotel_cluster'] = [ ' '.join([str(c) for c in clusters]) for clusters in allClusters]
+    results.to_csv(filename, index=False)
+    
           
 if __name__ == '__main__':
     unzip_datasets()
