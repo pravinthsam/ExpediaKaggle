@@ -6,6 +6,8 @@ Created on Thu May  5 15:19:44 2016
 """
 import load_data
 import random
+from sklearn.decomposition import PCA
+import pandas as pd
 
 NUM_USERS = 50000
 
@@ -48,7 +50,7 @@ if __name__ == '__main__':
     
     load_data.createSubmissionFile(testdfAll[['id']], simple_solution, 'results/first_submit.csv')
     
-    # Simple rule for aggregating across orig_destination_distance and hotel_market
+    '''# Simple rule for aggregating across orig_destination_distance and hotel_market
     print 'Calculating the results when aggregated over orig_destination_distance and hotel_market...'
     dist_market_map =  {}   
     for index, t in traindf.iterrows():
@@ -62,6 +64,52 @@ if __name__ == '__main__':
                 dist_market_map[key][t.hotel_cluster] = 1
             else:
                 dist_market_map[key][t.hotel_cluster] = dist_market_map[key][t.hotel_cluster] + 1
+    '''
+    
+    # Cluster the different destinations together     
+    destinations = load_data.load_destinations()
+    
+    pca_dest = PCA(n_components=3)
+    dest_small = pca_dest.fit_transform(destinations[['d{0}'.format(i) for i in range(1,150)]])
+    dest_small = pd.DataFrame(dest_small)
+    
+    # TODO check how much data has been lost
+    dest_small['srch_destination_id'] = destinations['srch_destination_id']
+    
+    # Convert dates and times
+    traindf['date_time'] = pd.to_datetime(traindf['date_time'])
+    traindf['date_time_year'] = traindf['date_time'].apply(lambda x: x.year)
+    traindf['date_time_month'] = traindf['date_time'].apply(lambda x: x.month)
+    traindf['date_time_day'] = traindf['date_time'].apply(lambda x: x.day)
+    traindf['date_time_dayofweek'] = traindf['date_time'].apply(lambda x: x.dayofweek)
+    traindf['date_time_hour'] = traindf['date_time'].apply(lambda x: x.hour)
+    
+    traindf['srch_ci'] = pd.to_datetime(traindf['srch_ci'])
+    traindf['srch_ci_year'] = traindf['srch_ci'].apply(lambda x: x.year)
+    traindf['srch_ci_month'] = traindf['srch_ci'].apply(lambda x: x.month)
+    traindf['srch_ci_day'] = traindf['srch_ci'].apply(lambda x: x.day)
+    
+    traindf['srch_co'] = pd.to_datetime(traindf['srch_co'])
+    traindf['srch_co_year'] = traindf['srch_co'].apply(lambda x: x.year)
+    traindf['srch_co_month'] = traindf['srch_co'].apply(lambda x: x.month)
+    traindf['srch_co_day'] = traindf['srch_co'].apply(lambda x: x.day)
+    
+    testdf['date_time'] = pd.to_datetime(testdf['date_time'])
+    testdf['date_time_year'] = testdf['date_time'].apply(lambda x: x.year)
+    testdf['date_time_month'] = testdf['date_time'].apply(lambda x: x.month)
+    testdf['date_time_day'] = testdf['date_time'].apply(lambda x: x.day)
+    testdf['date_time_dayofweek'] = testdf['date_time'].apply(lambda x: x.dayofweek)
+    testdf['date_time_hour'] = testdf['date_time'].apply(lambda x: x.hour)
+    
+    testdf['srch_ci'] = pd.to_datetime(testdf['srch_ci'])
+    testdf['srch_ci_year'] = testdf['srch_ci'].apply(lambda x: x.year)
+    testdf['srch_ci_month'] = testdf['srch_ci'].apply(lambda x: x.month)
+    testdf['srch_ci_day'] = testdf['srch_ci'].apply(lambda x: x.day)
+    
+    testdf['srch_co'] = pd.to_datetime(testdf['srch_co'])
+    testdf['srch_co_year'] = testdf['srch_co'].apply(lambda x: x.year)
+    testdf['srch_co_month'] = testdf['srch_co'].apply(lambda x: x.month)
+    testdf['srch_co_day'] = testdf['srch_co'].apply(lambda x: x.day)
         
     
     

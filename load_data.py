@@ -31,7 +31,11 @@ def load_expdata_chunks(folderpath = './data/'):
     testreader = pd.read_csv(folderpath + 'test.csv', chunksize=CHUNK_SIZE)
     
     return trainreader, testreader
-    
+
+def load_destinations(folderpath = './data/'):
+    destinations = pd.read_csv(folderpath + 'destinations.csv')
+    return destinations
+
 def setOfAllUsers(df_reader):
     
     setAll = set([])
@@ -58,4 +62,4 @@ def createSubmissionFile(idList, allClusters, filename = 'results/model_results.
     
           
 if __name__ == '__main__':
-    unzip_datasets()
+    dests = load_destinations()
