@@ -8,11 +8,12 @@ import load_data
 import random
 from sklearn.decomposition import PCA
 import pandas as pd
+import numpy as np
 import time
 
 start_time = time.time()
 
-NUM_USERS = 100000
+NUM_USERS = 10000
 DEST_COMP = 3
 
 def expand_dt(dt_df, attrs):
@@ -79,7 +80,8 @@ if __name__ == '__main__':
                 dist_market_map[key][t.hotel_cluster] = dist_market_map[key][t.hotel_cluster] + 1
     '''
     
-    # Cluster the different destinations together     
+    # Cluster the different destinations together
+    print 'Generating features from destinations...'
     destinations = load_data.load_destinations()
     
     pca_dest = PCA(n_components=DEST_COMP)
@@ -87,12 +89,14 @@ if __name__ == '__main__':
     dest_small = pd.DataFrame(dest_small)
     
     # TODO check how much data has been lost
+    
     dest_small['srch_destination_id'] = destinations['srch_destination_id']
     dest_small_columns = ['dest_feat_{0}'.format(i) for i in range(1,DEST_COMP+1)]
     dest_small_columns.append('srch_destination_id')
     dest_small.columns = dest_small_columns
     
     # Convert dates and times
+    print 'Adding features from date columns...'
     dt_fields1 = ['year', 'month', 'day', 'dayofweek', 'hour']
     dt_fields2 = ['year', 'month', 'day', 'dayofweek']
     
@@ -110,13 +114,12 @@ if __name__ == '__main__':
     testdf = testdf.join(expand_dt(testdf[['srch_ci']], dt_fields2))
     testdf = testdf.join(expand_dt(testdf[['srch_co']], dt_fields2))
     
-    
-        
-    
     # Adding stay time
     traindf['stay_time'] = (traindf['srch_co'] - traindf['srch_ci']).astype('timedelta64[D]').astype(int)
     testdf['stay_time'] = (testdf['srch_co'] - testdf['srch_ci']).astype('timedelta64[D]').astype(int)
     
+    # TODO add cumulative data as features. Per User, Per cluster, Per destination id
+        
     # Attach destinations features
     traindf = traindf.join(dest_small, how='left', on='srch_destination_id', rsuffix='dest')
     testdf = testdf.join(dest_small, how='left', on='srch_destination_id', rsuffix='dest')
@@ -127,8 +130,8 @@ if __name__ == '__main__':
     traindf.fillna(-1, inplace=True)
     testdf.fillna(-1, inplace=True)
     
-    
     # Random Forest
+    print 'Using random forest on all the hotel clusters as classes...'
     predictors = [c for c in traindf.columns if c not in ['hotel_cluster', 'date_time', 'srch_ci', 'srch_co']]
             
     from sklearn import cross_validation
@@ -137,8 +140,48 @@ if __name__ == '__main__':
     clf = RandomForestClassifier(n_estimators=10, min_weight_fraction_leaf=0.1)
     scores = cross_validation.cross_val_score(clf, traindf[predictors], traindf['hotel_cluster'].apply(str), cv=3)
     
+    # binary classifiers
+    print 'Doing binary classification for each of the clusters...'
+    from sklearn.cross_validation import KFold
+    from itertools import chain
     
+    all_probs = []
+    all_clusters = traindf['hotel_cluster'].unique()
     
+    for cluster in all_clusters:
+        print cluster
+        traindf['target'] = 0
+        traindf['target'][traindf['hotel_cluster']==cluster] = 1
+        
+        predictors = [col for col in traindf.columns if col not in ['hotel_cluster', 'date_time', 'srch_ci', 'srch_co', 'target']]
+        
+        probs = []
+        cv = KFold(len(traindf['target']), n_folds=2) 
+        # TODO currently not doing random
+        # TODO increase number of folds
+        
+        clf = RandomForestClassifier(n_estimators=10, min_weight_fraction_leaf=0.1)
+        
+        for ix, (tr_ix, te_ix) in enumerate(cv):
+            clf.fit(traindf[predictors].iloc[tr_ix], traindf['target'].iloc[tr_ix])
+            te_preds = clf.predict_proba(traindf[predictors].iloc[te_ix])
+            probs.append([p[1] for p in te_preds])
+        probs = chain.from_iterable(probs)
+        all_probs.append(list(probs))
+        
+    all_probs = np.array(all_probs).T
+    
+    binary_preds = []
+    binary_preds_probs = []
+    binary_preds_confidence = []
+    
+    for row in all_probs:
+        row_indices = list((-row).argsort()[:5])
+        binary_preds.append(all_clusters[row_indices])
+        binary_preds_probs.append(row[row_indices])
+        binary_preds_confidence.append(row[row_indices].sum())
+    
+    load_data.createSubmissionFile(testdfAll[['id']], simple_solution, 'results/first_submit.csv')
     
 end_time = time.time()
 print 'Program took', (end_time-start_time), 'seconds to run.'    
