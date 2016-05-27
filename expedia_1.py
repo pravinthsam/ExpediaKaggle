@@ -30,6 +30,7 @@ if __name__ == '__main__':
     
     
     # Generating list of users
+    print 'Loading data sets...'
     setOfAllUsersTest = load_data.setOfAllUsers(testreader)
     setOfAllUsersTrain = load_data.setOfAllUsers(trainreader)
     setOfAllCommonUsers = setOfAllUsersTest.intersection(setOfAllUsersTrain)
@@ -44,6 +45,7 @@ if __name__ == '__main__':
     testdf = load_data.subsetDataset(testreader, subsetOfUsers)
     
     # Filtering dataset for only booking events
+    # TODO Use click data as well
     traindf = traindf[traindf.is_booking==1]
     
     # Removing nan values
@@ -100,35 +102,37 @@ if __name__ == '__main__':
     dt_fields1 = ['year', 'month', 'day', 'dayofweek', 'hour']
     dt_fields2 = ['year', 'month', 'day', 'dayofweek']
     
-    traindf['date_time'] = pd.to_datetime(traindf['date_time'])
-    traindf['srch_ci'] = pd.to_datetime(traindf['srch_ci'])
-    traindf['srch_co'] = pd.to_datetime(traindf['srch_co'])
-    traindf = traindf.join(expand_dt(traindf[['date_time']], dt_fields1))
-    traindf = traindf.join(expand_dt(traindf[['srch_ci']], dt_fields2))
-    traindf = traindf.join(expand_dt(traindf[['srch_co']], dt_fields2))
+    def datetimeexpand(df):
+        df['date_time'] = pd.to_datetime(df['date_time'])
+        df['srch_ci'] = pd.to_datetime(df['srch_ci'])
+        df['srch_co'] = pd.to_datetime(df['srch_co'])
+        df = df.join(expand_dt(df[['date_time']], dt_fields1))
+        df = df.join(expand_dt(df[['srch_ci']], dt_fields2))
+        df = df.join(expand_dt(df[['srch_co']], dt_fields2))
+        return df
     
-    testdf['date_time'] = pd.to_datetime(testdf['date_time'])
-    testdf['srch_ci'] = pd.to_datetime(testdf['srch_ci'])
-    testdf['srch_co'] = pd.to_datetime(testdf['srch_co'])
-    testdf = testdf.join(expand_dt(testdf[['date_time']], dt_fields1))
-    testdf = testdf.join(expand_dt(testdf[['srch_ci']], dt_fields2))
-    testdf = testdf.join(expand_dt(testdf[['srch_co']], dt_fields2))
+    traindf = datetimeexpand(traindf)
+    testdf = datetimeexpand(testdf)
+    testdfAll = datetimeexpand(testdfAll)
     
     # Adding stay time
     traindf['stay_time'] = (traindf['srch_co'] - traindf['srch_ci']).astype('timedelta64[D]').astype(int)
     testdf['stay_time'] = (testdf['srch_co'] - testdf['srch_ci']).astype('timedelta64[D]').astype(int)
+    testdfAll['stay_time'] = (testdfAll['srch_co'] - testdfAll['srch_ci']).astype('timedelta64[D]').astype(int)
     
     # TODO add cumulative data as features. Per User, Per cluster, Per destination id
         
     # Attach destinations features
     traindf = traindf.join(dest_small, how='left', on='srch_destination_id', rsuffix='dest')
     testdf = testdf.join(dest_small, how='left', on='srch_destination_id', rsuffix='dest')
+    testdfAll = testdfAll.join(dest_small, how='left', on='srch_destination_id', rsuffix='dest')
     
     #TODO remove extra srch_d_id column?
     
     # filling null values with -1
     traindf.fillna(-1, inplace=True)
     testdf.fillna(-1, inplace=True)
+    testdfAll.fillna(-1, inplace=True)
     
     # Random Forest
     print 'Using random forest on all the hotel clusters as classes...'
@@ -145,7 +149,8 @@ if __name__ == '__main__':
     from sklearn.cross_validation import KFold
     from itertools import chain
     
-    all_probs = []
+    all_tr_probs = []
+    all_te_probs = []
     all_clusters = traindf['hotel_cluster'].unique()
     
     for cluster in all_clusters:
@@ -153,9 +158,9 @@ if __name__ == '__main__':
         traindf['target'] = 0
         traindf['target'][traindf['hotel_cluster']==cluster] = 1
         
-        predictors = [col for col in traindf.columns if col not in ['hotel_cluster', 'date_time', 'srch_ci', 'srch_co', 'target']]
+        predictors = [col for col in traindf.columns if col not in ['hotel_cluster', 'cnt', 'is_booking', 'date_time', 'srch_ci', 'srch_co', 'target']]
         
-        probs = []
+        tr_probs = []
         cv = KFold(len(traindf['target']), n_folds=2) 
         # TODO currently not doing random
         # TODO increase number of folds
@@ -164,18 +169,25 @@ if __name__ == '__main__':
         
         for ix, (tr_ix, te_ix) in enumerate(cv):
             clf.fit(traindf[predictors].iloc[tr_ix], traindf['target'].iloc[tr_ix])
-            te_preds = clf.predict_proba(traindf[predictors].iloc[te_ix])
-            probs.append([p[1] for p in te_preds])
-        probs = chain.from_iterable(probs)
-        all_probs.append(list(probs))
+            tr_preds = clf.predict_proba(traindf[predictors].iloc[te_ix])
+            tr_probs.append([p[1] for p in tr_preds])
+            
+        tr_probs = chain.from_iterable(tr_probs)
+        all_tr_probs.append(list(tr_probs))
         
-    all_probs = np.array(all_probs).T
+        te_preds = clf.predict_proba(testdf[predictors])
+        te_probs = [p[1] for p in te_preds]
+        all_te_probs.append(list(te_probs))
+        
+        
+        
+    all_te_probs = np.array(all_te_probs).T
     
     binary_preds = []
     binary_preds_probs = []
     binary_preds_confidence = []
     
-    for row in all_probs:
+    for row in all_te_probs:
         row_indices = list((-row).argsort()[:5])
         binary_preds.append(all_clusters[row_indices])
         binary_preds_probs.append(row[row_indices])
