@@ -16,15 +16,36 @@ start_time = time.time()
 NUM_USERS = 10000
 DEST_COMP = 3
 
-def expand_dt(dt_df, attrs):
+'''def expand_dt(dt_df, attrs):
     colname = dt_df.columns[0]
     new_df = dt_df[[]]
     
     for attr in attrs:
         new_df[colname + '_' + attr] = dt_df[colname].apply(lambda x: x.__getattribute__(attr))
     
+    return new_df'''
+    
+'''def expand_dt(dt_df, attrs):
+    colname = dt_df.columns[0]
+    
+    new_df = dt_df[colname].apply(lambda x: pd.Series([x.__getattribute__(attr) for attr in attrs]))
+    new_df.columns = [colname + '_' + x for x in attrs]
     return new_df
+'''
 
+def expand_dt(dt_df, attrs):
+    colname = dt_df.columns[0]
+    
+    def datesplitfunc(dt):
+        return [dt.__getattribute__(attr) for attr in attrs]
+        
+    newarr = map(datesplitfunc, dt_df[colname])
+    new_df = pd.DataFrame(newarr).astype('uint8')
+    new_df.columns = [colname + '_' + x for x in attrs]
+    new_df.index = dt_df.index
+    
+    return new_df
+    
 if __name__ == '__main__':
     trainreader, testreader = load_data.load_expdata_chunks()
     
@@ -65,6 +86,7 @@ if __name__ == '__main__':
     simple_solution = [most_common_clusters for i in range(len(testdfAll))]
     
     load_data.createSubmissionFile(testdfAll[['id']], simple_solution, 'results/first_submit.csv')
+    simple_solution = None
     
     '''# Simple rule for aggregating across orig_destination_distance and hotel_market
     print 'Calculating the results when aggregated over orig_destination_distance and hotel_market...'
@@ -103,17 +125,24 @@ if __name__ == '__main__':
     dt_fields2 = ['year', 'month', 'day', 'dayofweek']
     
     def datetimeexpand(df):
-        df['date_time'] = pd.to_datetime(df['date_time'])
-        df['srch_ci'] = pd.to_datetime(df['srch_ci'])
-        df['srch_co'] = pd.to_datetime(df['srch_co'])
-        df = df.join(expand_dt(df[['date_time']], dt_fields1))
-        df = df.join(expand_dt(df[['srch_ci']], dt_fields2))
-        df = df.join(expand_dt(df[['srch_co']], dt_fields2))
+        df['date_time'] = pd.to_datetime(df['date_time'], errors='coerce')
+        df['srch_ci'] = pd.to_datetime(df['srch_ci'], errors='coerce')
+        df['srch_co'] = pd.to_datetime(df['srch_co'], errors='coerce')
+        
+        tmp_df = expand_dt(df[['date_time']], dt_fields1)
+        df[tmp_df.columns] = tmp_df
+        tmp_df = expand_dt(df[['srch_ci']], dt_fields2)
+        df[tmp_df.columns] = tmp_df
+        tmp_df = expand_dt(df[['srch_co']], dt_fields2)
+        df[tmp_df.columns] = tmp_df       
+        
         return df
     
-    traindf = datetimeexpand(traindf)
-    testdf = datetimeexpand(testdf)
-    testdfAll = datetimeexpand(testdfAll)
+    raise Exception('python!!')     
+    
+    traindf1 = datetimeexpand(traindf)
+    testdf1 = datetimeexpand(testdf)
+    testdfAll1 = datetimeexpand(testdfAll)
     
     # Adding stay time
     traindf['stay_time'] = (traindf['srch_co'] - traindf['srch_ci']).astype('timedelta64[D]').astype(int)
